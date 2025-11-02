@@ -1,12 +1,24 @@
-
 import pytesseract
 import PIL.Image
 from PIL import Image
-import cv2
 import re
 import phonenumbers
 from pdf2image import convert_from_path
+import gspread
+from google.oauth2.service_account import Credentials
+from PyPDF2 import PdfReader
 
+
+##Google Sheet API
+scopes = [
+   "https://www.googleapis.com/auth/spreadsheets"
+]
+creds = Credentials.from_service_account_file("creds.json", scopes=scopes)
+client = gspread.authorize(creds)
+
+sheet_id = "1OwgeJUBjTyPvCPfvXQANVbC5ZJ7qlX9u9iBpIfnDvJ8"
+sheet = client.open_by_key(sheet_id)
+worksheet = sheet.sheet1
 
 def get_email(s):
     result = []
@@ -110,24 +122,36 @@ def read_ss(img_ori):
   clean3 = re.sub(r"[^\x00-\x7F]+", " ", text3)
   organization = re.sub(r"\s+", " ", clean3).strip()
  
+  phones_str = ', '.join(phones) if phones else ''
+    
+  emails_str = ', '.join(emails) if emails else ''
+
   print("Name:", name[0])
-  print("Phones: ", phones)
-  print("Emails: ", emails)
+  print("Phones: ", phones_str)
+  print("Emails: ", emails_str)
   print("Postion: ", position)
   print("Organization:", organization)
   print("\n")
 
+  return [name[0], phones_str, emails_str, position, organization]
+
 def main():
-  pages = convert_from_path('first5.pdf', 500)
-  
-  for count, page in enumerate(pages):
-    top_img = pages[count].crop((500, 500, 3750, 2100))
-    read_ss(top_img)
-    bot_img = pages[count].crop((500, 2100, 3750, 3700))
-    read_ss(bot_img)
+  pdf_path = 'Full.pdf'
+  size = 10
 
-  
-  
+  reader = PdfReader(pdf_path)
+  num_pages = len(reader.pages)
 
+  for i in range(0, num_pages, size):
+     pages = convert_from_path(pdf_path, dpi=500, first_page=i+1, last_page=min(i+size, num_pages))
+     
+     for count, page in enumerate(pages):
+       top_img = pages[count].crop((500, 500, 3750, 2100))
+       top_data = read_ss(top_img)
+       bot_img = pages[count].crop((500, 2100, 3750, 3700))
+       bot_data = read_ss(bot_img)
+       
+       worksheet.append_row(top_data)
+       worksheet.append_row(bot_data)
 
 main()
